@@ -106,7 +106,7 @@ def getVariableIntegerValue(data):
         raise ValueError('Invalid variable length integer input')
     
     
-#TODO : direcly parse bytes
+
 def encodeVariableInteger(integer):
     
     if 0 <= integer < 0xFD:

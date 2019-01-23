@@ -17,8 +17,8 @@ def sha256ripemd160(data):
 def dsha256(data):
     return sha256(sha256(data).digest()).digest()
 
-def pubKeytoAddress(publicKeyHex):
-    h = sha256ripemd160(unhexlify(publicKeyHex))
+def pubKeytoAddress(publicKey):
+    h = sha256ripemd160(publicKeyHex)
     checksum = dsha256(b'\x1e' + h)[:4]
     return base58.b58encode(b'\x1e' + h + checksum)
 

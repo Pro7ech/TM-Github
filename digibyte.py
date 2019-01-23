@@ -61,8 +61,6 @@ def generateAddress(prefix=b''):
         address = base58.b58encode(b'\x1e' + h + b'\x00\x00\x00\x00')
         if address[:len(prefix)].lower() == prefix:
             break
-
-        
     print(hexlify(sk.to_string()))
     checksum = dsha256(b'\x1e' + h)[:4]
     address = base58.b58encode(b'\x1e' + h + checksum)
@@ -77,17 +75,34 @@ def verify_digest(digest,sig,vk):
 
 #TODO : direcly parse bytes
 def parseVariableLengthInteger(data):
-    size = int(data[:2],16)
+
+    size = int.from_bytes(data[:1], byteorder='big')
+    
     if size<0xFD:
-        return data[:2]
+        return data[:1]
     elif size == 0xFD:
-        return data[2:6]
+        return data[:6]
     elif size == 0xFE:
-        return data[2:10]
+        return data[:10]
     elif size == 0xFF:
-        return data[2:18]
+        return data[:18]
     else:
         raise ValueError('Invalid variable length integer input')
+
+def getVariableLengthInteger(data):
+    size = int.from_bytes(data[:1], byteorder='big')
+    
+    if size<0xFD:
+        return size
+    elif size == 0xFD:
+        return int.from_bytes(data[2:6], byteorder='little') 
+    elif size == 0xFE:
+        return int.from_bytes(data[2:10], byteorder='little')
+    elif size == 0xFF:
+        return int.from_bytes(data[2:18], byteorder='little')
+    else:
+        raise ValueError('Invalid variable length integer input')
+    
     
 #TODO : direcly parse bytes
 def encodeVariableLengthInteger(integer):
@@ -101,54 +116,74 @@ def encodeVariableLengthInteger(integer):
         return bytes('FF{:016x}'.format(integer),'utf-8')
     else:
         raise ValueError('Invalid integer')
-    
-#TODO : direcly parse bytes
+
+
+
 def parseSignedRawTransaction(transaction):
+    transaction = unhexlify(transaction)
+    
+    
     TX = {}
     pointer = 0
-    TX['format'] = transaction[pointer:pointer+8]
-    pointer += 8
-    TX['Inputs'] = parseVariableLengthInteger(transaction[pointer:pointer+18])
+    TX['format'] = transaction[pointer:pointer+4]
+    pointer += 4
+    
+    TX['Inputs'] = parseVariableLengthInteger(transaction[pointer:pointer+9])
     pointer += len(TX['Inputs'])
+
+    print(hexlify(TX['Inputs']))
     
     TX['vin'] = []
     
-    for i in range(int(TX['Inputs'],16)):
+    for i in range(getVariableLengthInteger(TX['Inputs'])):
         tmp = {}
         
-        tmp['txid'] = transaction[pointer:pointer+64]
-        pointer += 64
-        tmp['Index'] = transaction[pointer:pointer+8]
-        pointer += 8
-        tmp['Length'] = parseVariableLengthInteger(transaction[pointer:pointer+18])
+        tmp['txid'] = transaction[pointer:pointer+32]
+        pointer += 32
         
+        tmp['Index'] = transaction[pointer:pointer+4]
+        pointer += 4
+        
+        tmp['Length'] = parseVariableLengthInteger(transaction[pointer:pointer+9])
         pointer += len(tmp['Length'])
         
-        scriptLength = int(tmp['Length'],16)<<1
+        scriptLength = getVariableLengthInteger(tmp['Length'])
+        
         tmp['ScriptSig'] = transaction[pointer:pointer+scriptLength]
+        
         pointer += scriptLength
-        tmp['Sequence'] = transaction[pointer:pointer+8]
-        pointer += 8
+        
+        tmp['Sequence'] = transaction[pointer:pointer+4]
+        
+        pointer += 4
 
         TX['vin'] += [tmp]
+
         
-    TX['Outputs'] = transaction[pointer:pointer+2]
-    pointer += 2
+    TX['Outputs'] = parseVariableLengthInteger(transaction[pointer:pointer+9])
+    
+    pointer += len(TX['Outputs'])
 
     TX['vout'] = []
-    
-    for i in range(int(TX['Outputs'],16)):
+
+    for i in range(getVariableLengthInteger(TX['Outputs'])):
         tmp = {}
-        tmp ['Value'] = transaction[pointer:pointer+16]
-        pointer += 16
-        tmp ['Length'] = parseVariableLengthInteger(transaction[pointer:pointer+18])
+        tmp ['Value'] = transaction[pointer:pointer+8]
+        pointer += 8
+        
+        tmp ['Length'] = parseVariableLengthInteger(transaction[pointer:pointer+9])
+        
         pointer += len(tmp ['Length'])
-        scriptLength = int(tmp['Length'],16)<<1
-        tmp ['ScriptPubKey'] = transaction[pointer:pointer+scriptLength]
+        
+        scriptLength = getVariableLengthInteger(tmp['Length'])
+        
+        tmp['ScriptPubKey'] = transaction[pointer:pointer+scriptLength]
+        
         pointer += scriptLength
+        
         TX['vout'] += [tmp]
         
-    TX['Locktime'] = transaction[pointer:pointer+8]
+    TX['Locktime'] = transaction[pointer:pointer+4]
 
     return TX
 
@@ -198,7 +233,6 @@ def verifySignedRawTransaction(transaction,inputs):
             rawtmp += tmp['vout'][j]['Length']
             rawtmp += tmp['vout'][j]['ScriptPubKey']
 
-        
         rawtmp += tmp['Locktime']
         rawtmp += signature[-2:] + b'000000'
 

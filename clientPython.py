@@ -46,7 +46,7 @@ ssl_context.load_verify_locations(pathlib.Path(__file__).with_name('certificate.
 ws_address = 'wss://localhost:3000/request'
 
 #External Explorer
-explorerUrl = "http://192.168.1.127:3001/insight-digibyte-api" #"https://digiexplorer.info/api"
+explorerUrl = "https://digiexplorer.info/api" #"http://192.168.1.127:3001/insight-digibyte-api"
 marketUrl = "https://api.coinmarketcap.com/v1/ticker/digibyte/"
 
 #Local Explorer
@@ -199,13 +199,13 @@ def getOpData(txid):
         for data in tx['vout']:
             if 'scriptPubKey' in data:
                 if 'asm' in data['scriptPubKey']:
-                    OP = data['scriptPubKey']['asm']
-                    if OP[:9] == 'OP_RETURN':
-                        out['OP_RETURN'] = unhexlify(OP[10:])
+                    OP = data['scriptPubKey']['hex']
+                    if OP[:2] == '6a':
+                        out['OP_RETURN'] = unhexlify(OP[4:])
 
         return out
 
-x = getTxData('117a9dc8729ecc8a0d750809fd4b871fa924f6a4531d388a0305e400ae1beb78')
+x = getOpData('117a9dc8729ecc8a0d750809fd4b871fa924f6a4531d388a0305e400ae1beb78')
 print(x)
 #asyncio.get_event_loop().run_until_complete(getOPReturn(txid,mackey))
 #asyncio.get_event_loop().run_until_complete(sendOPReturn(data,mackey))

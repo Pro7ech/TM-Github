@@ -6,7 +6,7 @@ const request = require('request');
 const utils = require('./utils');
 
 //External Explorer
-const explorerUrl = "http://192.168.1.127:3001/insight-digibyte-api"//"https://digiexplorer.info/api";
+const explorerUrl = "https://digiexplorer.info/api"//"http://192.168.1.127:3001/insight-digibyte-api"//;
 const marketUrl = "https://api.coinmarketcap.com/v1/ticker/digibyte/";
 
 //Local Explorer
@@ -93,7 +93,7 @@ function getUTXOs(address){
                 reject(E)
             };
 
-            resolve(JSON.parse(data));
+            resolve(utils.safelyParseJSON(data));
 
         });
     });
@@ -246,7 +246,7 @@ function getOpData(tx){
         }else{// If tx is already transaction
 
             var response = {}
-            response.time = tx.time
+            response.time = result.content.time
             response.OP_RETURN = OPfromtx(tx);
             resolve(response)
         };
@@ -254,29 +254,15 @@ function getOpData(tx){
 
     // Retrieves the OP data from the transaction
     function OPfromtx(tx) {
-        // If there is an OP data it will be located in the vout -> scriptPubKey -> asm
-        // part of the transaction and start with 'OP_RETURN'
-        // ex : vout { 
-        //              0 : {
-        //                  scriptPubKey : { 
-        //                      asm :  "OP_DUP OP_HASH160 e2363e66869cd5c665f2d37d0ecc84d1900d281f 
-        //								OP_EQUALVERIFY OP_CHECKSIG"}}
-        //              1 : {
-        //                  scriptPubKey : {
-        //                      asm : "OP_RETURN 5448495320495320412054455354203a20536174204d61792
-        //							   0313220323031382032323a32383a303620474d542b303230302028572e
-        //						       204575726f7065204461796c696768742054696d6529"}}    
-        //              }   
-        //              
 
         for(let i in tx.vout){
 
             var vout = tx.vout[i];
             var data = vout.scriptPubKey.asm || false;
+            //6a = OP_RETURN
+            if(data && data.substr(0,2) == '6a'){
 
-            if(data && data.substr(0,9) == 'OP_RETURN'){
-
-                return utils.hex2string(data.substr(10));
+                return utils.hex2string(data.substr(4));
 
             };
         };
@@ -288,10 +274,10 @@ function getOpData(tx){
 
 function anchorData(data, privateKey, address){
     return new Promise((resolve, reject) => {
-
+    	//destinations : JSON.parse('{"' + address + '":' + 600000 + '}')
         createTransaction(  sourcePrivateKey = privateKey,
                             sourceAddress    = address,
-                            destinations     = false, //JSON.parse('{"' + address + '":' + 600000 + '}')
+                            destinations     = false, 
                             changeAddress    = address,
                             fee              = false,
                             data             = data)

@@ -26,8 +26,8 @@ def compress(vk_hex):
     assert len(vk_hex) == 128
     x = vk_hex[:64]
     y = vk_hex[64:]
-    if int(y[-1])&1 : prefix = b'03'
-    else : prefix = b'02'
+    if int(y[-1])&1 : prefix = b'\x03'
+    else : prefix = b'\x02'
     return prefix + x
 
 
@@ -38,7 +38,7 @@ def decompress(compressed_vk):
     x = int.from_bytes(compressed_vk[1:], byteorder='big')
     
     p = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F
-    y_squared = (x**3 + 7) % p
+    y_squared = (pow(x,3,p) + 7) % p
     y = pow(y_squared,(p+1)>>2,p)
     
     if prefix == b'\x03' and y&1 == 0:

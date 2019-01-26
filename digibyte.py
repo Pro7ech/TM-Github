@@ -6,8 +6,8 @@ from hashlib import sha256
 import base58
 from os import urandom
 import copy
-import ssl
-
+import json
+import requests
 
 
 def sha256ripemd160(data):
@@ -19,9 +19,13 @@ def dsha256(data):
     return sha256(sha256(data).digest()).digest()
 
 def pubKeytoAddress(publicKey):
-    h = sha256ripemd160(publicKeyHex)
+    h = sha256ripemd160(publicKey)
     checksum = dsha256(b'\x1e' + h)[:4]
     return base58.b58encode(b'\x1e' + h + checksum)
+
+def addresstopubKeyHash(address):
+    tmp = base58.b58decode(address)
+    return tmp[1:-4]
 
 def compress(vk):
     vk = vk.to_string()
@@ -32,13 +36,9 @@ def compress(vk):
     else : prefix = b'\x02'
     return prefix + x
 
-
 def decompress(compressed_vk):
-
     prefix = compressed_vk[:1]
-
     x = int.from_bytes(compressed_vk[1:], byteorder='big')
-    
     p = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F
     y_squared = (pow(x,3,p) + 7) % p
     y = pow(y_squared,(p+1)>>2,p)
@@ -137,7 +137,7 @@ def encodeVariableInteger(integer):
     elif 0xFC < integer < 0x10000:
         return b'\xfd' + (integer).to_bytes(2,byteorder='little')
     elif 0xFFFF < integer < 0x100000000:
-        return b'\xFE' + (integer).to_bytes(4,byteorder='little')
+        return b'\xfe' + (integer).to_bytes(4,byteorder='little')
     elif 0xFFFFFFFF < integer < 0x10000000000000000:
         return b'\xff' + (integer).to_bytes(8,byteorder='little')
     else:
@@ -205,7 +205,6 @@ def parseSignedRawTransaction(transaction):
     return TX
 
 
-
 def verifySignedRawTransaction(transaction,inputs):
     TX = parseSignedRawTransaction(transaction)
 
@@ -263,7 +262,7 @@ def verifySignedRawTransaction(transaction,inputs):
 
         rawtmp += tmp['Locktime']
         rawtmp += signature[-1:] + b'\x00\x00\x00'
-
+        print(rawtmp)
         signed = dsha256(rawtmp)
   
         v = verify_digest(signed,signature,vk)
@@ -284,6 +283,8 @@ class transaction(object):
 
         self.change = b''
         self.totalValueIn = 0
+
+        self.isSigned = False
 
     def addInputs(self,vin):
         self.tx['nVin'] += 1
@@ -350,9 +351,9 @@ class transaction(object):
 
             serializedTX = b''
             serializedTX += self.tx['version']
-
+            
             serializedTX += encodeVariableInteger(self.tx['nVin'])
-
+            
             for j in range(self.tx['nVin']):
                 serializedTX += self.tx['vin'][j]['previousTXID']
                 serializedTX += self.tx['vin'][j]['previousVoutIndex']
@@ -380,7 +381,8 @@ class transaction(object):
             
             self.tx['vin'][i]['scriptSig'] = len(signature).to_bytes(1,byteorder='big') + signature  + len(vk_compressed).to_bytes(1,byteorder='big') + vk_compressed
             self.tx['vin'][i]['scriptLength'] = encodeVariableInteger(len(self.tx['vin'][i]['scriptSig']))
-            
+
+        self.isSigned = True
 
     def serialize(self):
         serializedTX = b''
@@ -407,10 +409,16 @@ class transaction(object):
         serializedTX += self.tx['locktime']
         
         return hexlify(serializedTX)
-
-inputs = [{"scriptPubKey":unhexlify("76a914128bef368aee81f7f89a0206e77aabbfd5b4f05b88ac")},
-          {"scriptPubKey":unhexlify("76a914128bef368aee81f7f89a0206e77aabbfd5b4f05b88ac")}]
-
-x = b'010000000272f5fe89b3db1343301384ed5981b4b3e1cfabe9abcb48b92cdfae1c34b55ac7020000006a473044022041be4bf959fb9296872b71b17580b4ec0be79ccc2f7232360b1af23148b0797f02205bca0687905e219fe4b068c7a8fd6f231827a44fee10145af6df7fa5d1f7e319012103a81a7d62c25af7945e225b74f75478e53672b585d9ac8ec88344f4b92f34e843ffffffff72f5fe89b3db1343301384ed5981b4b3e1cfabe9abcb48b92cdfae1c34b55ac7000000006a47304402201bfe24973497bf7b15dba2ecbae03ed496c60f03e8998f1aaf8971367f63637b022042e5ccb818dbc931e77a8dc935bef004f30263e11176a791a35f0db0f1b80536012103a81a7d62c25af7945e225b74f75478e53672b585d9ac8ec88344f4b92f34e843ffffffff03c0270900000000001976a914128bef368aee81f7f89a0206e77aabbfd5b4f05b88ac0000000000000000216a1f54686973206973206120746573742031353a31312032352e31312e3230313820961877000000001976a914128bef368aee81f7f89a0206e77aabbfd5b4f05b88ac00000000'
-v = verifySignedRawTransaction(x,inputs)
-print(v)
+         
+        
+        
+def getUTXOs(address):
+    """
+        INPUT  address  : DGB address
+        OUTPUT : error or json object with walletinfos
+    """
+    r = requests.get("https://digiexplorer.info/api" + "/addr/" + address + "/utxo" )
+    if r.status_code == 200:
+        return r.json()
+    else:
+        return {'error' : r.text}

@@ -69,9 +69,30 @@ def generateAddress(prefix=b''):
     address = base58.b58encode(b'\x1e' + h + checksum)
     print(address)
 
-    
+
+#Custom DER encoding makes the management of r and s easier
 def sign_digest(digest,sk):
-    return sk.sign_digest(digest,sigencode=ecdsa.util.sigencode_der)
+    
+    signature = sk.sign_digest(digest)
+
+    r = int.from_bytes(signature[:32],byteorder='big')
+    s = int.from_bytes(signature[32:],byteorder='big')
+            
+    n = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141
+            
+    if s > (n>>1): s = n-s
+
+    r = (r).to_bytes(32,byteorder='big')
+    s = (s).to_bytes(32,byteorder='big')
+
+    if r[0] > 0x7f: r = b'\x00' + r
+    if s[0] > 0x7f: s = b'\x00' + s
+
+    tmp =  b'\x02' + len(r).to_bytes(1,byteorder='big') + r + b'\x02' + len(s).to_bytes(1,byteorder='big') + s
+
+    signature = b'\x30' + len(tmp).to_bytes(1,byteorder='big') + tmp
+
+    return signature
 
 def verify_digest(digest,sig,vk):
     return vk.verify_digest(sig[:-1],digest,sigdecode=ecdsa.util.sigdecode_der)
@@ -355,23 +376,7 @@ class transaction(object):
             serializedTX += self.tx['locktime']
             serializedTX += b'\x01\x00\x00\x00'
 
-            signature = sk.sign_digest(dsha256(serializedTX),sigencode=ecdsa.util.sigencode_der)
-            
-            rlength=signature[3+signature[3]+2]
-            
-            r = int.from_bytes(signature[3+signature[3]+3:],byteorder='big')
-            
-            n = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141
-            
-            if r > (n>>1):
-                r = n-r
-                
-            sig = signature[4:4+signature[3]]
-            r = (r).to_bytes(32,byteorder='big')
-
-            signature =  b'\x02' + len(sig).to_bytes(1,byteorder='big') +sig+ b'\x02' + len(r).to_bytes(1,byteorder='big') + r
-
-            signature = b'\x30' + len(signature).to_bytes(1,byteorder='big') + signature + b'\x01'
+            signature = sign_digest(dsha256(serializedTX),sk) + b'\x01'
             
             self.tx['vin'][i]['scriptSig'] = len(signature).to_bytes(1,byteorder='big') + signature  + len(vk_compressed).to_bytes(1,byteorder='big') + vk_compressed
             self.tx['vin'][i]['scriptLength'] = encodeVariableInteger(len(self.tx['vin'][i]['scriptSig']))

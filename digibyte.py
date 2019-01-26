@@ -6,6 +6,7 @@ from hashlib import sha256
 import base58
 from os import urandom
 import copy
+import ssl
 
 
 
@@ -22,11 +23,12 @@ def pubKeytoAddress(publicKey):
     checksum = dsha256(b'\x1e' + h)[:4]
     return base58.b58encode(b'\x1e' + h + checksum)
 
-def compress(vk_hex):
-    assert len(vk_hex) == 128
-    x = vk_hex[:64]
-    y = vk_hex[64:]
-    if int(y[-1])&1 : prefix = b'\x03'
+def compress(vk):
+    vk = vk.to_string()
+    assert len(vk) == 64
+    x = vk[:32]
+    y = vk[32:]
+    if y[-1]&1 : prefix = b'\x03'
     else : prefix = b'\x02'
     return prefix + x
 
@@ -247,7 +249,165 @@ def verifySignedRawTransaction(transaction,inputs):
         if v != True:
             return False
     return True
+
+
+class transaction(object):
+    def __init__(self):
+        self.tx = {}
+        self.tx['version'] = (1).to_bytes(4,byteorder='little')
+        self.tx['nVin'] = 0
+        self.tx['vin'] = []
+        self.tx['nVout'] = 0
+        self.tx['vout'] = []
+        self.tx['locktime'] = b'\x00\x00\x00\x00'
+
+        self.change = b''
+        self.totalValueIn = 0
+
+    def addInputs(self,vin):
+        self.tx['nVin'] += 1
+
+        if 'statoshis' not in vin:
+            self.totalValueIn += int(round(vin['amount']*100000000))
+        else:
+            self.totalValueIn += vin['satoshis']
+
+        tmp = {}
+        tmp['previousTXID'] = unhexlify(vin['txid'])[::-1]
+        tmp['previousVoutIndex'] = (vin['vout']).to_bytes(4,byteorder='little')
+        tmp['scriptLength'] = len(unhexlify(vin['scriptPubKey'])).to_bytes(1,byteorder='little')
+        tmp['scriptSig'] = unhexlify(vin['scriptPubKey'])
+        tmp['sequence'] = b'\xff\xff\xff\xff'
         
+        self.tx['vin'] += [tmp]
+       
+    def addDestination(self,address,amount):
+        pubKeyHash = addresstopubKeyHash(address)
+        self.tx['nVout'] += 1
+        self.totalValueIn -= amount
+
+        tmp = {}
+        tmp['amount'] = (amount).to_bytes(8,byteorder='little')
+        tmp['scriptLength'] = b''
+        tmp['scriptPubKey'] = b'\x76\xa9' + len(pubKeyHash).to_bytes(1,byteorder='big') + pubKeyHash + b'\x88\xac'
+        tmp['scriptLength'] = encodeVariableInteger(len(tmp['scriptPubKey']))
+
+        self.tx['vout'] += [tmp]
+
+    def changeAddress(self,address):
+        self.change = address
+        
+    def addData(self,data, amount=0):
+        self.tx['nVout'] += 1
+        self.totalValueIn -= amount
+
+        tmp = {}
+        tmp['amount'] = (amount).to_bytes(8,byteorder='little')
+        tmp['scriptLength'] = b''
+        tmp['scriptPubKey'] = b'\x6a' + len(data).to_bytes(1,byteorder='big') + data
+        tmp['scriptLength'] = encodeVariableInteger(len(tmp['scriptPubKey']))
+
+        self.tx['vout'] += [tmp]
+
+    def sign(self, sk):
+        
+        vk = sk.get_verifying_key()
+        vk_compressed = compress(vk)
+        
+        signatures = []
+
+        size = self.tx['nVin']*180 + self.tx['nVout']*34 + 10 + self.tx['nVin'] + 80
+
+        fee = 100 * size
+
+        if fee < 100000:
+            fee = 100000
+
+        self.addDestination(self.change,self.totalValueIn-fee)
+        
+        for i in range(self.tx['nVin']):
+
+            serializedTX = b''
+            serializedTX += self.tx['version']
+            
+            serializedTX += encodeVariableInteger(self.tx['nVin'])
+            
+            for j in range(self.tx['nVin']):
+                
+                if j == i:
+                    
+                    serializedTX += self.tx['vin'][j]['previousTXID']
+                    serializedTX += self.tx['vin'][j]['previousVoutIndex']
+                    serializedTX += self.tx['vin'][j]['scriptLength']
+                    serializedTX += self.tx['vin'][j]['scriptSig']
+                    serializedTX += self.tx['vin'][j]['sequence']
+                    
+                else :
+                    
+                    serializedTX += self.tx['vin'][j]['previousTXID']
+                    serializedTX += self.tx['vin'][j]['previousVoutIndex']
+                    serializedTX += b'\x00'
+                    serializedTX += b''
+                    serializedTX += self.tx['vin'][j]['sequence']
+                
+            serializedTX += encodeVariableInteger(self.tx['nVout'])
+            
+            for j in range(self.tx['nVout']):
+                
+                serializedTX += self.tx['vout'][j]['amount']
+                serializedTX += self.tx['vout'][j]['scriptLength']
+                serializedTX += self.tx['vout'][j]['scriptPubKey']
+                
+            serializedTX += self.tx['locktime']
+            serializedTX += b'\x01\x00\x00\x00'
+
+            signature = sk.sign_digest(dsha256(serializedTX),sigencode=ecdsa.util.sigencode_der)
+            
+            rlength=signature[3+signature[3]+2]
+            
+            r = int.from_bytes(signature[3+signature[3]+3:],byteorder='big')
+            
+            n = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141
+            
+            if r > (n>>1):
+                r = n-r
+                
+            sig = signature[4:4+signature[3]]
+            r = (r).to_bytes(32,byteorder='big')
+
+            signature =  b'\x02' + len(sig).to_bytes(1,byteorder='big') +sig+ b'\x02' + len(r).to_bytes(1,byteorder='big') + r
+
+            signature = b'\x30' + len(signature).to_bytes(1,byteorder='big') + signature + b'\x01'
+            
+            self.tx['vin'][i]['scriptSig'] = len(signature).to_bytes(1,byteorder='big') + signature  + len(vk_compressed).to_bytes(1,byteorder='big') + vk_compressed
+            self.tx['vin'][i]['scriptLength'] = encodeVariableInteger(len(self.tx['vin'][i]['scriptSig']))
+            
+
+    def serialize(self):
+        serializedTX = b''
+        serializedTX += self.tx['version']
+        
+        serializedTX += encodeVariableInteger(self.tx['nVin'])
+        
+        for i in range(self.tx['nVin']):
+            
+            serializedTX += self.tx['vin'][i]['previousTXID']
+            serializedTX += self.tx['vin'][i]['previousVoutIndex']
+            serializedTX += self.tx['vin'][i]['scriptLength']
+            serializedTX += self.tx['vin'][i]['scriptSig']
+            serializedTX += self.tx['vin'][i]['sequence']
+            
+        serializedTX += encodeVariableInteger(self.tx['nVout'])
+        
+        for i in range(self.tx['nVout']):
+            
+            serializedTX += self.tx['vout'][i]['amount']
+            serializedTX += self.tx['vout'][i]['scriptLength']
+            serializedTX += self.tx['vout'][i]['scriptPubKey']
+            
+        serializedTX += self.tx['locktime']
+        
+        return hexlify(serializedTX)
 
 inputs = [{"scriptPubKey":unhexlify("76a914128bef368aee81f7f89a0206e77aabbfd5b4f05b88ac")},
           {"scriptPubKey":unhexlify("76a914128bef368aee81f7f89a0206e77aabbfd5b4f05b88ac")}]

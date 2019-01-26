@@ -205,8 +205,7 @@ def getOpData(txid):
 
         return out
 
-x = getOpData('117a9dc8729ecc8a0d750809fd4b871fa924f6a4531d388a0305e400ae1beb78')
-print(x)
+
 #asyncio.get_event_loop().run_until_complete(getOPReturn(txid,mackey))
 #asyncio.get_event_loop().run_until_complete(sendOPReturn(data,mackey))
 #asyncio.get_event_loop().run_until_complete(getWalletInfo(wallet))

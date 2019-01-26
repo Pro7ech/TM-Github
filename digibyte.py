@@ -329,26 +329,20 @@ class transaction(object):
 
             serializedTX = b''
             serializedTX += self.tx['version']
-            
+
             serializedTX += encodeVariableInteger(self.tx['nVin'])
-            
+
             for j in range(self.tx['nVin']):
-                
+                serializedTX += self.tx['vin'][j]['previousTXID']
+                serializedTX += self.tx['vin'][j]['previousVoutIndex']
+
                 if j == i:
-                    
-                    serializedTX += self.tx['vin'][j]['previousTXID']
-                    serializedTX += self.tx['vin'][j]['previousVoutIndex']
                     serializedTX += self.tx['vin'][j]['scriptLength']
                     serializedTX += self.tx['vin'][j]['scriptSig']
-                    serializedTX += self.tx['vin'][j]['sequence']
-                    
                 else :
-                    
-                    serializedTX += self.tx['vin'][j]['previousTXID']
-                    serializedTX += self.tx['vin'][j]['previousVoutIndex']
                     serializedTX += b'\x00'
-                    serializedTX += b''
-                    serializedTX += self.tx['vin'][j]['sequence']
+
+                serializedTX += self.tx['vin'][j]['sequence']
                 
             serializedTX += encodeVariableInteger(self.tx['nVout'])
             

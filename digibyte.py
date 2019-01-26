@@ -71,7 +71,7 @@ def generateAddress(prefix=b''):
 
     
 def sign_digest(digest,sk):
-    return sk.sign_digest(digest,sigencode=ecdsa.util.sigencode_der) + b'\x01'
+    return sk.sign_digest(digest,sigencode=ecdsa.util.sigencode_der)
 
 def verify_digest(digest,sig,vk):
     return vk.verify_digest(sig[:-1],digest,sigdecode=ecdsa.util.sigdecode_der)

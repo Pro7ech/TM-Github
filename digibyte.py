@@ -78,6 +78,10 @@ class transaction(object):
 
         self.tx['vout'] += [tmp]
 
+    def locktime(self,locktime):
+        assert 0<= locktime <= 0xFFFFFFFF
+        self.locktime = (locktime).to_bytes(4,byteorder='little')
+
     def sign(self, sk):
         
         vk = sk.get_verifying_key()

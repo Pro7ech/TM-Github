@@ -32,11 +32,12 @@ class transaction(object):
         self.tx['nVin'] += 1
 
         if 'statoshis' not in vin:
-            self.totalValueIn += int(round(vin['amount']*100000000))
+            amount= int(round(vin['amount']*100000000))
         else:
-            self.totalValueIn += vin['satoshis']
+            amount= vin['satoshis']
 
         tmp = {}
+        tmp['amount'] = (amount).to_bytes(8,byteorder='little')
         tmp['previousTXID'] = unhexlify(vin['txid'])[::-1]
         tmp['previousVoutIndex'] = (vin['vout']).to_bytes(4,byteorder='little')
         tmp['scriptLength'] = len(unhexlify(vin['scriptPubKey'])).to_bytes(1,byteorder='little')
@@ -84,10 +85,10 @@ class transaction(object):
         totalValue = 0
         
         for i in range(self.tx['nVin']):
-            totalValue += self.tx['vin'][i]['amount']
+            totalValue += int.from_bytes(self.tx['vin'][i]['amount'],byteorder='little')
 
         for i in range(self.tx['nVout']):
-            totalValue -= self.tx['vout'][i]['amout']
+            totalValue -= int.from_bytes(self.tx['vout'][i]['amount'],byteorder='little')
 
         return totalValue
             
@@ -101,16 +102,18 @@ class transaction(object):
         if fee < 100000:
             fee = 100000
 
+        totalValue = self.totalValue()
+
         if totalValue - fee <0:
             raise Exception('Not enough inputs to cover outputs and fee, missing {}'.format(totalValue-fee))
+
+        self.addDestination(self.change,totalValue-fee)
 
         vk = sk.get_verifying_key()
         vk_compressed = compress(vk)
         
         signatures = []
 
-        self.addDestination(self.change,self.totalValue-fee)
-        
         for i in range(self.tx['nVin']):
 
             serializedTX = b''
@@ -464,17 +467,15 @@ def getUTXOs(address):
 
 
 
-
-sk = importPrivateKey('privateKey.txt')
-address = privateKeytoAddress(sk)
-UTXO = getUTXOs(address)
-
-
-tx = transaction()
-tx.addInputs(UTXO[0])
-tx.addData(bytes(str(datetime.datetime.now()),'utf-8'))
-tx.changeAddress(address)
-tx.sign(sk)
+#Exemple
+#sk = importPrivateKey('privateKey.txt')
+#address = privateKeytoAddress(sk)
+#UTXO = getUTXOs(address)
+#tx = transaction()
+#tx.addInputs(UTXO[0])
+#tx.addData(bytes(str(datetime.datetime.now()),'utf-8'))
+#tx.changeAddress(address)
+#tx.sign(sk)
 #r = tx.send()
 #print(r)
 

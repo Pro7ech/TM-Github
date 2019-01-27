@@ -451,18 +451,16 @@ def getUTXOs(address):
 
 
 
-
-sk = importPrivateKey('privateKey.txt')
-address = privateKeytoAddress(sk)
-UTXO = getUTXOs(address)
-
-
-tx = transaction()
-tx.addInputs(UTXO[0])
-tx.addData(bytes(str(datetime.datetime.now()),'utf-8'))
-tx.changeAddress(address)
-tx.sign(sk)
-r = tx.send()
-print(r)
+##Exemple
+#sk = importPrivateKey('privateKey.txt')
+#address = privateKeytoAddress(sk)
+#UTXO = getUTXOs(address)
+#tx = transaction()
+#tx.addInputs(UTXO[0])
+#tx.addData(bytes(str(datetime.datetime.now()),'utf-8'))
+#tx.changeAddress(address)
+#tx.sign(sk)
+#r = tx.send()
+#print(r)
 
 

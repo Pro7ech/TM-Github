@@ -258,7 +258,7 @@ function getOpData(tx){
         for(let i in tx.vout){
 
             var vout = tx.vout[i];
-            var data = vout.scriptPubKey.asm || false;
+            var data = vout.scriptPubKey.hex || false;
             //6a = OP_RETURN
             if(data && data.substr(0,2) == '6a'){
 

@@ -1,5 +1,7 @@
 # TM-Github
 
+[![CLA assistant](https://cla-assistant.io/readme/badge/Pro7ech/TM-Github)](https://cla-assistant.io/Pro7ech/TM-Github) 
+
 .env file is missing and should have the following format : 
 
 SYMKEY=hexstring
